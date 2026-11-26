@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "pc-control": {
+      "command": "uv",
+      "args": [
+        "--directory",
+        "server",
+        "run",
+        "pc_control_mcp.py"
+      ]
+    }
+  }
+}
