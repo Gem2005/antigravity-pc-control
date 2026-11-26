@@ -1,9 +1,9 @@
 """Local Windows PC-Control MCP Server for Antigravity.
 
-Provides fast desktop vision (with background screen-watcher cache),
-batched real-time GUI automation, Win32 overlay ring + physical input lock
-with Ctrl+C abort, window management, application launching, clipboard access,
-system telemetry, process/service inspection, and user file search.
+Provides fast Windows UI Automation (no-screenshot element clicks/typing),
+optional local Gemini real-time streaming micro-agent, batched GUI sequences,
+background screen-share JPEG frame cache, Win32 border-ring + input lock with
+Ctrl+C abort, window management, clipboard, and system telemetry.
 """
 
 from __future__ import annotations
@@ -40,6 +40,9 @@ import pyperclip
 from mcp.server.mcpserver import Image, MCPServer
 from mcp.types import CallToolResult, TextContent
 from PIL import Image as PILImage
+
+from realtime_worker import has_gemini_api_key, run_realtime_task
+from ui_tree import inspect_ui_tree, perform_ui_action
 
 pyautogui.FAILSAFE = True
 pyautogui.PAUSE = 0.01
@@ -363,6 +366,29 @@ def _resolve_coords(
     raise ValueError(f"Unsupported coord_space: {coord_space}")
 
 
+def _capture_raw_jpeg(max_width: int = 1024, quality: int = 75) -> tuple[bytes, dict[str, int]]:
+    global _LAST_CAPTURE
+    with mss.MSS() as sct:
+        region = sct.monitors[1]
+        raw = sct.grab(region)
+        img = PILImage.frombytes("RGB", raw.size, raw.bgra, "raw", "BGRX")
+    sw, sh = img.size
+    if max_width > 0 and sw > max_width:
+        img = img.resize((max_width, max(1, round(sh * max_width / sw))), PILImage.Resampling.BILINEAR)
+    iw, ih = img.size
+    _LAST_CAPTURE = {
+        "screen_left": int(region["left"]),
+        "screen_top": int(region["top"]),
+        "screen_width": int(sw),
+        "screen_height": int(sh),
+        "image_width": int(iw),
+        "image_height": int(ih),
+    }
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", quality=max(30, min(quality, 95)))
+    return buf.getvalue(), dict(_LAST_CAPTURE)
+
+
 def _capture_image_content(
     monitor: int = 1,
     window_title: str | None = None,
@@ -479,13 +505,7 @@ def control_session(
     action: Literal["start", "stop", "status"],
     timeout_seconds: float = 25.0,
 ) -> str:
-    """Start, stop, or inspect the Gemini PC-control border ring and physical input lock.
-
-    When started, displays an animated border ring around the screen, blocks physical
-    human mouse/keyboard input (while letting Gemini's automated actions pass through),
-    shows a 'Gemini has control of your PC — to stop, press Ctrl+C' banner if interrupted,
-    and automatically releases on Ctrl+C or timeout.
-    """
+    """Start, stop, or inspect the Gemini PC-control border ring, physical input lock, and local worker status."""
     if action == "start":
         _GUARD.start(timeout=timeout_seconds)
         _WATCHER.touch()
@@ -494,14 +514,102 @@ def control_session(
                 "active": True,
                 "timeout_seconds": timeout_seconds,
                 "stop_hotkey": "Ctrl+C",
+                "has_gemini_api_key": has_gemini_api_key(),
             }
         )
     if action == "stop":
         _GUARD.stop()
         return json.dumps({"active": False})
     if action == "status":
-        return json.dumps({"active": _GUARD.active, "aborted": _GUARD.aborted})
+        return json.dumps(
+            {
+                "active": _GUARD.active,
+                "aborted": _GUARD.aborted,
+                "has_gemini_api_key": has_gemini_api_key(),
+            }
+        )
     raise ValueError(f"Unsupported action: {action}")
+
+
+@mcp.tool()
+def get_ui_tree(
+    window_title: str | None = None,
+    max_depth: int = 5,
+    max_elements: int = 120,
+    interactive_only: bool = True,
+) -> str:
+    """Inspect live Windows UI Automation controls (buttons, inputs, tabs, menus) without taking a screenshot."""
+    return json.dumps(
+        inspect_ui_tree(
+            window_title=window_title,
+            max_depth=max_depth,
+            max_elements=max_elements,
+            interactive_only=interactive_only,
+        ),
+        indent=2,
+    )
+
+
+@mcp.tool()
+def ui_action(
+    action: Literal["click", "double_click", "right_click", "set_text", "focus"],
+    name: str | None = None,
+    automation_id: str | None = None,
+    control_type: str | None = None,
+    window_title: str | None = None,
+    text: str | None = None,
+    exact: bool = False,
+    auto_lock: bool = True,
+) -> str:
+    """Click, focus, or type into a native Windows UI Automation control by name/ID without screenshots."""
+    _GUARD.raise_if_aborted()
+    if auto_lock:
+        _GUARD.heartbeat(timeout=20.0)
+    res = perform_ui_action(
+        action=action,
+        name=name,
+        automation_id=automation_id,
+        control_type=control_type,
+        window_title=window_title,
+        text=text,
+        exact=exact,
+        paste_fn=_paste_text,
+    )
+    return json.dumps(res, indent=2)
+
+
+@mcp.tool()
+def realtime_task(
+    goal: str,
+    max_steps: int = 12,
+    model: str = "gemini-2.5-flash",
+    window_title: str | None = None,
+    include_screenshot: bool = True,
+) -> CallToolResult:
+    """Run a tight local Gemini Flash Vision+UIA real-time micro-agent loop (requires GEMINI_API_KEY in env or ~/.env)."""
+    result = run_realtime_task(
+        goal=goal,
+        max_steps=max_steps,
+        model=model,
+        window_title=window_title,
+        include_screenshot=include_screenshot,
+        guard=_GUARD,
+        watcher=_WATCHER,
+        capture_raw_fn=_capture_raw_jpeg,
+        resolve_coords_fn=_resolve_coords,
+        focus_fn=_focus_win,
+        launch_fn=launch_app,
+        paste_fn=_paste_text,
+    )
+    contents: list[Any] = [TextContent(type="text", text=json.dumps(result, indent=2))]
+    if result.get("status") != "missing_api_key":
+        try:
+            img_content, meta = _capture_image_content(use_cache_ms=0)
+            contents.append(img_content)
+            contents.append(TextContent(type="text", text=meta))
+        except Exception:
+            pass
+    return CallToolResult(content=contents)
 
 
 @mcp.tool()
@@ -513,16 +621,7 @@ def take_screenshot(
     quality: int = 80,
     use_cache_ms: int = 400,
 ) -> CallToolResult:
-    """Capture a fast screenshot of the Windows desktop, a monitor, or a specific window.
-
-    Args:
-        monitor: 1 for primary monitor (default), 2+ for secondary monitors, 0 for all monitors combined.
-        window_title: Optional window title substring or HWND to capture just that window.
-        max_width: Resize image width down to at most this many pixels (0 disables resizing).
-        format: 'jpeg' (fast default) or 'png'.
-        quality: JPEG quality (30..95).
-        use_cache_ms: Reuse background screen-share frame if newer than this many milliseconds (0 forces fresh grab).
-    """
+    """Capture a fast screenshot of the Windows desktop, a monitor, or a specific window."""
     img_content, metadata = _capture_image_content(
         monitor=monitor,
         window_title=window_title,
@@ -541,23 +640,7 @@ def run_gui_sequence(
     auto_lock: bool = True,
     release_after: bool = False,
 ) -> CallToolResult:
-    """Execute a multi-step GUI workflow in a single fast call and optionally return the updated screenshot.
-
-    Each item in `steps` is a dict with an `action` key:
-      - {"action": "focus_window", "target": "<title or hwnd>"}
-      - {"action": "launch_app", "target": "<exe or path>", "args": [...]}
-      - {"action": "click", "x": 600, "y": 400, "coord_space": "last_screenshot", "button": "left", "clicks": 1}
-      - {"action": "double_click", "x": 600, "y": 400, "coord_space": "last_screenshot"}
-      - {"action": "right_click", "x": 600, "y": 400, "coord_space": "last_screenshot"}
-      - {"action": "move", "x": 600, "y": 400, "coord_space": "last_screenshot"}
-      - {"action": "drag", "x": 100, "y": 100, "end_x": 300, "end_y": 300, "coord_space": "last_screenshot"}
-      - {"action": "scroll", "scroll_amount": -500, "x": 600, "y": 400, "coord_space": "last_screenshot"}
-      - {"action": "type", "text": "..."}
-      - {"action": "paste_text", "text": "..."}
-      - {"action": "press", "key": "enter"}
-      - {"action": "hotkey", "keys": ["ctrl", "a"]}
-      - {"action": "wait", "ms": 200}
-    """
+    """Execute a multi-step GUI workflow in a single fast call and optionally return the updated screenshot."""
     _GUARD.clear_abort()
     if auto_lock:
         _GUARD.start(timeout=25.0)
@@ -654,7 +737,7 @@ def mouse_action(
     scroll_amount: int = 0,
     coord_space: Literal["screen", "last_screenshot", "normalized_1000"] = "screen",
 ) -> str:
-    """Perform a single mouse action on the Windows desktop. Prefer run_gui_sequence for multi-step flows."""
+    """Perform a single mouse action on the Windows desktop. Prefer ui_action or run_gui_sequence."""
     _GUARD.raise_if_aborted()
     _GUARD.heartbeat(timeout=20.0)
     sx, sy = _resolve_coords(x, y, coord_space)
@@ -711,7 +794,7 @@ def keyboard_action(
     keys: list[str] | None = None,
     interval: float = 0.0,
 ) -> str:
-    """Send keyboard input or hotkeys to the active Windows application. Prefer run_gui_sequence for multi-step flows."""
+    """Send keyboard input or hotkeys to the active Windows application."""
     _GUARD.raise_if_aborted()
     _GUARD.heartbeat(timeout=20.0)
 
