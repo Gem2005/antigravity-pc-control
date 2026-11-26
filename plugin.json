@@ -1,8 +1,8 @@
 {
   "name": "pc-control",
   "displayName": "PC Control",
-  "version": "0.2.0",
-  "description": "Windows PC control bundle: real-time batched GUI automation, screen-share frame caching, animated border-ring input lock with Ctrl+C abort, window management, diagnostics, networking, power tuning, and maintenance.",
+  "version": "0.3.0",
+  "description": "Windows PC control bundle: Windows UI Automation (zero-screenshot element clicks), local Gemini Flash real-time worker, pc-operator flash subagent, batched GUI sequences, animated border-ring input lock with Ctrl+C abort, diagnostics, networking, power, and maintenance.",
   "logo": "assets/logo.svg",
   "author": "Aaditya Sharma",
   "homepage": "https://github.com/Gem2005/antigravity-pc-control",

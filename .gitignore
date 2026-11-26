@@ -9,6 +9,10 @@ server/.venv/
 dist/
 build/
 
+# Secrets / local env
+.env
+.env.*
+
 # Logs & temp files
 *.log
 *.tmp
