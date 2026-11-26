@@ -5,6 +5,8 @@
   "description": "Windows PC control bundle: real-time batched GUI automation, screen-share frame caching, animated border-ring input lock with Ctrl+C abort, window management, diagnostics, networking, power tuning, and maintenance.",
   "logo": "assets/logo.svg",
   "author": "Aaditya Sharma",
+  "homepage": "https://github.com/Gem2005/antigravity-pc-control",
+  "repository": "https://github.com/Gem2005/antigravity-pc-control",
   "suggestedPrompts": [
     "Run a full PC health check on my CPU, RAM, disks, drivers, and recent system errors",
     "Diagnose my Wi-Fi connection and check my current power plan and battery settings",
