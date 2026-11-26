@@ -5,7 +5,7 @@ description = "Local Windows PC-control MCP server for Antigravity (real-time ba
 readme = "../README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
-authors = [{ name = "Aaditya Sharma" }]
+authors = [{ name = "Gemini Sharma", email = "geminisharma2005@gmail.com" }]
 dependencies = [
     "google-genai>=1.0.0",
     "mcp>=1.2.0",

@@ -4,7 +4,7 @@
   "version": "0.3.0",
   "description": "Windows PC control bundle: Windows UI Automation (zero-screenshot element clicks), local Gemini Flash real-time worker, pc-operator flash subagent, batched GUI sequences, animated border-ring input lock with Ctrl+C abort, diagnostics, networking, power, and maintenance.",
   "logo": "assets/logo.svg",
-  "author": "Aaditya Sharma",
+  "author": "Gemini Sharma",
   "homepage": "https://github.com/Gem2005/antigravity-pc-control",
   "repository": "https://github.com/Gem2005/antigravity-pc-control",
   "suggestedPrompts": [
