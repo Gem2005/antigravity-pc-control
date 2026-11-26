@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
 
 import pc_control_mcp as srv
+import realtime_worker as rw
 
 SERVER_DIR = Path(__file__).resolve().parents[1]
 SERVER_SCRIPT = SERVER_DIR / "pc_control_mcp.py"
@@ -38,6 +40,32 @@ def test_find_files_locates_markdown() -> None:
     assert any("pc-desktop-gui" in p for p in paths)
 
 
+def test_realtime_worker_reports_missing_key_safely(monkeypatch, tmp_path) -> None:
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.setattr(rw.Path, "home", lambda: tmp_path)
+    # Also ensure plugin-local .env doesn't interfere if absent
+    res = rw.run_realtime_task(
+        "open notepad",
+        guard=srv._GUARD,
+        watcher=srv._WATCHER,
+        capture_raw_fn=srv._capture_raw_jpeg,
+        resolve_coords_fn=srv._resolve_coords,
+        focus_fn=srv._focus_win,
+        launch_fn=srv.launch_app,
+        paste_fn=srv._paste_text,
+    )
+    assert res["status"] == "missing_api_key"
+    assert "GEMINI_API_KEY" in res["message"]
+
+
+def test_load_gemini_api_key_from_dotenv(monkeypatch, tmp_path) -> None:
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.setattr(rw.Path, "home", lambda: tmp_path)
+    (tmp_path / ".env").write_text('GEMINI_API_KEY="test-key-123"\n', encoding="utf-8")
+    assert rw.load_gemini_api_key() == "test-key-123"
+    assert rw.has_gemini_api_key() is True
+
+
 def test_mcp_stdio_roundtrip() -> None:
     proc = subprocess.Popen(
         [sys.executable, str(SERVER_SCRIPT)],
@@ -62,7 +90,7 @@ def test_mcp_stdio_roundtrip() -> None:
             "params": {
                 "protocolVersion": "2024-11-05",
                 "capabilities": {},
-                "clientInfo": {"name": "pytest", "version": "0.2.0"},
+                "clientInfo": {"name": "pytest", "version": "0.3.0"},
             },
         }
     )
@@ -75,6 +103,9 @@ def test_mcp_stdio_roundtrip() -> None:
     tool_names = {t["name"] for t in tools_res["result"]["tools"]}
     expected = {
         "control_session",
+        "get_ui_tree",
+        "ui_action",
+        "realtime_task",
         "take_screenshot",
         "run_gui_sequence",
         "mouse_action",
