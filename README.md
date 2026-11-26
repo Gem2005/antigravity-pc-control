@@ -33,7 +33,6 @@
 
 ```text
 pc-control/
-├── .github/workflows/ci.yml        # Windows CI test workflow
 ├── assets/logo.svg                 # Plugin icon
 ├── docs/
 │   ├── architecture.md             # System & Win32 overlay architecture

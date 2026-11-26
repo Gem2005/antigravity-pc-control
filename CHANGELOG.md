@@ -12,7 +12,7 @@ All notable changes to **PC Control** are documented in this file.
   - Top-center interrupt warning pill (`Gemini has control of your PC • To stop, press Ctrl+C`).
   - Immediate `Ctrl+C` emergency abort (`ABORTED_BY_USER`) and `25s` watchdog auto-release.
 - `_ScreenWatcher` background JPEG frame buffer (`1280px`) with `use_cache_ms` support in `take_screenshot`.
-- Repository documentation (`README.md`, `docs/`, `CONTRIBUTING.md`, `LICENSE`), unit/stdio tests (`server/tests/test_pc_control.py`), and GitHub Actions CI (`.github/workflows/ci.yml`).
+- Repository documentation (`README.md`, `docs/`, `CONTRIBUTING.md`, `LICENSE`) and unit/stdio tests (`server/tests/test_pc_control.py`).
 
 ### Changed
 - Switched `take_screenshot` default format from `PNG (optimize=True)` to fast `JPEG` (`quality=80`, `max_width=1280`).
